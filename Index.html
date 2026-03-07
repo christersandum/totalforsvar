@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇳🇴 Det norske totalforsvaret – Interaktivt hierarki</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #080d12;
+            color: #d8e4ef;
+            padding: 24px;
+            line-height: 1.6;
+        }
+
+        h1 { text-align: center; font-size: 2rem; margin-bottom: 6px; color: #fff; }
+        .subtitle { text-align: center; color: #8aa4b8; margin-bottom: 32px; font-size: 1.05rem; }
+
+        .main-layout {
+            display: flex;
+            max-width: 1440px;
+            margin: 0 auto;
+            gap: 28px;
+            align-items: flex-start;
+        }
+
+        .tree-column { flex: 1; min-width: 0; max-width: 860px; }
+
+        .popup-column {
+            width: 440px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 24px;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .popup-column.hidden { opacity: 0; pointer-events: none; transform: translateX(20px); }
+        .popup-column.visible { opacity: 1; pointer-events: auto; transform: translateX(0); }
+
+        .tree { width: 100%; }
+        .tree ul { list-style: none; padding-left: 0; }
+        .tree ul ul { padding-left: 26px; border-left: 2px solid #1a3350; margin-left: 14px; overflow: hidden; }
+        .tree li { margin: 4px 0; }
+
+        .node {
+            display: inline-flex; align-items: center; gap: 9px;
+            padding: 8px 16px; border-radius: 8px;
+            cursor: default; font-size: 1rem;
+            transition: background 0.15s, transform 0.1s, outline-color 0.3s, opacity 0.25s;
+            user-select: none; position: relative;
+            outline: 2px solid transparent;
+        }
+        .node.has-children { cursor: pointer; }
+        .node.has-children:hover { background: rgba(255,255,255,0.08); transform: translateX(3px); }
+
+        /* ── Nivåfarger – lyse og lesbare ── */
+        .level-0 > .node { background: #c0392b; color: #fff; font-weight: 700; font-size: 1.2rem; padding: 12px 20px; border-radius: 10px; }
+        .level-1 > .node { background: #17405e; color: #b0daff; font-weight: 600; font-size: 1.1rem; }
+        .level-2 > .node { background: #142f48; color: #8ccef5; font-size: 1.02rem; }
+        .level-3 > .node { background: #10243a; color: #6cc0e8; font-size: 0.96rem; }
+        .level-4 > .node { background: #0c1c2e; color: #55b4da; font-size: 0.92rem; }
+        .level-5 > .node { background: #0a1520; color: #7ebdd4; font-size: 0.9rem; }
+        .level-6 > .node { background: transparent; color: #6ca8c4; font-size: 0.88rem; }
+
+        .chevron { display: inline-block; width: 20px; height: 20px; flex-shrink: 0; transition: transform 0.25s ease; opacity: 0.7; }
+        .node.has-children:hover .chevron { opacity: 1; }
+        .expanded > .node > .chevron { transform: rotate(90deg); }
+
+        .tree li:not(.expanded) > ul { max-height: 0; opacity: 0; pointer-events: none; transition: max-height 0.35s, opacity 0.25s; }
+        .tree li.expanded > ul { max-height: 50000px; opacity: 1; pointer-events: auto; transition: max-height 0.5s, opacity 0.3s 0.05s; }
+
+        .badge { font-size: 0.78rem; background: rgba(255,255,255,0.12); color: #8ab4cc; padding: 2px 8px; border-radius: 10px; margin-left: 5px; }
+
+        /* ── Aktiv-markering (hover) ── */
+        .node.active-hover { outline: 2px solid #2ea8d0 !important; background: rgba(46,168,208,0.1) !important; }
+
+        /* ── Søke-effekter ── */
+        .highlight .label { background: #6b4400 !important; border-radius: 4px; padding: 2px 6px; color: #ffd966 !important; }
+        .search-path > .node { border-left: 3px solid #f0b429; }
+        .search-active > .node { outline: 2px solid #f0b429 !important; }
+
+        /* Dimming: mykere – fortsatt godt lesbart */
+        .dim > .node { opacity: 0.45; }
+
+        /* ── Søkefelt ── */
+        .search-box { max-width: 860px; margin: 0 auto 20px; display: flex; gap: 10px; }
+        .search-box input {
+            flex: 1; padding: 12px 18px; border-radius: 10px;
+            border: 1px solid #1a3350; background: #101c28; color: #d8e4ef; font-size: 1.05rem; outline: none;
+        }
+        .search-box input:focus { border-color: #3a9cc8; box-shadow: 0 0 0 2px rgba(58,156,200,0.2); }
+        .search-box input::placeholder { color: #4e6e82; }
+
+        .search-box button, .toolbar button, .search-nav button {
+            padding: 10px 18px; border-radius: 8px; border: 1px solid #1a3350;
+            background: #101c28; color: #a4d4ff; cursor: pointer; font-size: 0.95rem; transition: background 0.15s;
+        }
+        .search-box button:hover, .toolbar button:hover, .search-nav button:hover { background: #17405e; }
+
+        .search-count { max-width: 860px; margin: -12px auto 14px; font-size: 0.92rem; color: #f0b429; min-height: 1.6em; display: flex; align-items: center; gap: 14px; }
+        .search-nav { display: none; gap: 8px; align-items: center; }
+        .search-nav.visible { display: inline-flex; }
+        .search-nav button { padding: 6px 12px; font-size: 0.88rem; }
+        .search-nav span { font-size: 0.9rem; color: #8aa4b8; min-width: 50px; text-align: center; }
+
+        .toolbar { max-width: 860px; margin: 0 auto 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+        .toolbar button { font-size: 0.9rem; }
+
+        /* ── Info-panel ── */
+        .info-panel {
+            background: #101c28; border: 1px solid #1e4060; border-radius: 14px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; min-height: 160px;
+            display: flex; flex-direction: column;
+        }
+        .info-panel-header {
+            background: #17405e; padding: 14px 20px; font-weight: 600; font-size: 1.08rem;
+            color: #b0daff; border-bottom: 1px solid #1e4060;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .info-panel-header .close-btn {
+            cursor: pointer; color: #8ccef5; font-size: 1.3rem; background: none;
+            border: none; padding: 2px 8px; line-height: 1; border-radius: 4px; transition: background 0.15s;
+        }
+        .info-panel-header .close-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+        .info-panel-body {
+            padding: 18px 20px; font-size: 0.98rem; color: #c8dce8;
+            overflow-y: auto; max-height: 72vh; flex: 1; line-height: 1.7;
+        }
+        .info-panel-body a { color: #5cc8f0; text-decoration: none; }
+        .info-panel-body a:hover { text-decoration: underline; color: #90e0ff; }
+        .info-panel-body .wiki-extract { margin-bottom: 12px; }
+        .info-panel-body .wiki-link {
+            display: inline-block; margin-top: 8px; font-size: 0.92rem;
+            padding: 6px 14px; background: #17405e; border-radius: 6px; color: #b0daff;
+        }
+        .info-panel-body .wiki-link:hover { background: #1e5070; }
+        .info-panel-body .loading { color: #6aa0b8; font-style: italic; }
+        .info-panel-body .hierarchy {
+            font-size: 0.88rem; color: #5aaccc; margin-bottom: 14px;
+            padding-bottom: 10px; border-bottom: 1px solid #1a3350; line-height: 1.5;
+        }
+        .info-panel-body .hierarchy span { color: #7abccc; }
+        .info-panel-body .hierarchy .current { color: #f0b429; font-weight: 600; }
+        .info-panel-body .hierarchy .sep { color: #3a5a70; margin: 0 4px; }
+        .info-panel-body .empty-state { color: #5a8aa0; text-align: center; padding: 30px 10px; font-size: 1rem; }
+        .info-panel-body .empty-state .icon { font-size: 2rem; margin-bottom: 10px; display: block; }
+        .info-panel-body img.thumb { float: right; max-width: 120px; max-height: 100px; border-radius: 8px; margin: 0 0 10px 14px; border: 1px solid #1a3350; }
+
+        .prinsipper { max-width: 860px; margin: 48px auto 0; border-top: 1px solid #1a3350; padding-top: 28px; }
+        .prinsipper h2 { font-size: 1.15rem; margin-bottom: 14px; color: #b0daff; }
+        .prinsipper table { width: 100%; border-collapse: collapse; }
+        .prinsipper th, .prinsipper td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #1a3350; font-size: 0.96rem; }
+        .prinsipper th { color: #8ccef5; }
+        .kilder { max-width: 860px; margin: 28px auto; font-size: 0.85rem; color: #4a6a80; text-align: center; }
+
+        @media (max-width: 960px) {
+            .main-layout { flex-direction: column; }
+            .popup-column { width: 100%; position: static; order: -1; }
+            .popup-column.hidden { display: none; }
+            .tree-column { max-width: 100%; }
+            body { padding: 12px; }
+            h1 { font-size: 1.5rem; }
+            .info-panel-body { max-height: 40vh; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>🇳🇴 Det norske totalforsvaret</h1>
+<p class="subtitle">Klikk for å åpne/lukke · Pek på en enhet for info · Søk for å filtrere</p>
+
+<div class="search-box">
+    <input type="text" id="search" placeholder="Søk etter enhet (f.eks. Beredskapstroppen, Kripos, NC3, Livvakttjenesten...)">
+    <button onclick="resetSearch()">Nullstill</button>
+</div>
+<div class="search-count" id="searchCount">
+    <span id="searchText"></span>
+    <div class="search-nav" id="searchNav">
+        <button onclick="navigateSearch(-1)">◀</button>
+        <span id="searchPos"></span>
+        <button onclick="navigateSearch(1)">▶</button>
+    </div>
+</div>
+<div class="toolbar">
+    <button onclick="expandToLevel(1)">Nivå 1–2</button>
+    <button onclick="expandToLevel(2)">Nivå 1–3</button>
+    <button onclick="expandToLevel(3)">Nivå 1–4</button>
+    <button onclick="expandAll()">Åpne alt</button>
+    <button onclick="collapseAll()">Lukk alt</button>
+</div>
+
+<div class="main-layout">
+    <div class="tree-column"><div class="tree" id="tree"></div></div>
+    <div class="popup-column hidden" id="popupCol">
+        <div class="info-panel" id="infoPanel">
+            <div class="info-panel-header">
+                <span id="infoTitle">Informasjon</span>
+                <button class="close-btn" onclick="closePanel()" title="Lukk">✕</button>
+            </div>
+            <div class="info-panel-body" id="infoBody"></div>
+        </div>
+    </div>
+</div>
+
+<div class="prinsipper">
+    <h2>🔑 Nøkkelprinsipper i totalforsvaret</h2>
+    <table>
+        <tr><th>Prinsipp</th><th>Beskrivelse</th></tr>
+        <tr><td><strong>Ansvarsprinsippet</strong></td><td>Den som har ansvar i fred, har ansvar i krise og krig</td></tr>
+        <tr><td><strong>Likhetsprinsippet</strong></td><td>Organisasjonen skal være mest mulig lik i fred, krise og krig</td></tr>
+        <tr><td><strong>Nærhetsprinsippet</strong></td><td>Kriser skal håndteres på lavest mulig nivå</td></tr>
+        <tr><td><strong>Samvirkeprinsippet</strong></td><td>Alle aktører har plikt til å samarbeide</td></tr>
+    </table>
+</div>
+<p class="kilder">Kilder: regjeringen.no · forsvaret.no · politiet.no · pst.no · dsb.no · toll.no · forf.no · Wikipedia (no) · SNL · Folk og Forsvar</p>
+
+<script>
+const data={name:"Regjeringen (Statsministeren / SMK)",children:[{name:"Forsvarsdepartementet (FD)",children:[{name:"Forsvarssjefen / FOH",children:[{name:"Hæren",children:[{name:"Brigade Nord (Indre Troms)",children:[{name:"Panserbataljonen"},{name:"2. bataljon (mek. infanteri)"},{name:"Artilleribataljonen"},{name:"Ingeniørbataljonen"},{name:"Sambandsbataljonen"},{name:"Stridstrenbataljonen (logistikk)"},{name:"Sanitetsbataljonen"}]},{name:"Finnmarksbrigaden",children:[{name:"Lett infanteribataljon"},{name:"Artilleriavdeling"},{name:"Luftvernavdeling"},{name:"Ingeniøravdeling"},{name:"Etterretningsavdeling"}]},{name:"Brigade Sør (Østerdalen) – under oppbygging",children:[{name:"Reservistbaserte manøverbataljoner"}]},{name:"Etterretningsregimentet"},{name:"Militærpolitiregimentet"},{name:"Hærens våpenskole"}]},{name:"Sjøforsvaret",children:[{name:"Marinen",children:[{name:"Fregattvåpenet (Fridtjof Nansen-kl., 4 fregatter)"},{name:"Korvettskvadronen (Skjold-kl., 6 korvetter)"},{name:"Undervannsbåtvåpenet (Ula-kl. → 212CD)"},{name:"Minevåpenet (Oksøy/Alta-kl.)"},{name:"Logistikkvåpenet (KNM Maud m.fl.)"},{name:"Sjøforsvarets forsyningskommando (SFK)"}]},{name:"Kystvakten",children:[{name:"Ytre kystvakt (Nordkapp-kl., Barentshav-kl.)"},{name:"Indre kystvakt (Nornen-kl.)"}]}]},{name:"Luftforsvaret",children:[{name:"132 Luftving (Ørland) – F-35 hovedbase",children:[{name:"331 skvadron (F-35)"},{name:"332 skvadron (F-35)"},{name:"Baseforsvarsskvadron"},{name:"Luftvernbataljon (NASAMS)"}]},{name:"133 Luftving (Evenes) – QRA/maritim",children:[{name:"F-35 QRA-detasjement"},{name:"333 skvadron (P-8 Poseidon)"},{name:"Baseforsvarsbataljon"},{name:"Luftvernbataljon"}]},{name:"134 Luftving (Rygge)",children:[{name:"339 skvadron (Bell 412)"},{name:"Luftforsvarsstaben"}]},{name:"131 Luftving (Sørreisa) – kontroll/varsling",children:[{name:"Kontroll- og varslingsstasjoner (Vardø, Senja, Honningsvåg m.fl.)"}]},{name:"130 Luftving (Sola) – redningshelikopter",children:[{name:"330 skvadron (AW101 SAR Queen)"}]},{name:"335 skvadron (Gardermoen) – C-130J transport"},{name:"337 skvadron (Bardufoss) – NH90 maritim"},{name:"CAOC Bodø (NATO luftkommando)"}]},{name:"Heimevernet (HV)",children:[{name:"HV-01 Oslofjord (Rygge)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-02 Oslo og Akershus (Lutvann)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-03 Telemark og Buskerud (Heistadmoen)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-05 Opplandske (Terningmoen)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-07 Agder (Kjevik) – under oppbygging"},{name:"HV-08 Rogaland (Vatneleiren)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-09 Bergenhus (Bergenhus festning)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-11 Møre og Fjordane (Setnesmoen)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-12 Trøndelag (Værnes)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-14 Sør-Hålogaland (Drevjamoen)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-16 Nord-Hålogaland (Bjerkvik)",children:[{name:"HV-områder og innsatsstyrke"}]},{name:"HV-17 Finnmark (Porsangmoen)",children:[{name:"HV-områder og innsatsstyrke"}]}]},{name:"Cyberforsvaret",children:[{name:"Cyberforsvarets CIS-regiment"},{name:"Cyberforsvarets IKT-tjenester"},{name:"Cybersikkerhetssenteret"}]},{name:"Forsvarets spesialstyrker (FS)",children:[{name:"Forsvarets spesialkommando (FSK)"},{name:"Marinejegerkommandoen (MJK)"}]},{name:"Forsvarets sanitet (FSAN)",children:[{name:"Sanitetsregimentet"},{name:"Institutt for militær medisin"}]}]},{name:"Etterretningstjenesten (E-tjenesten)",children:[{name:"Signaletterretning"},{name:"Menneskelig etterretning (HUMINT)"},{name:"Cyberetterretning"}]},{name:"Forsvarsmateriell (FMA)",children:[{name:"Kapasiteter: Land, Sjø, Luft, IKT"}]},{name:"Forsvarets forskningsinstitutt (FFI)",children:[{name:"Forsvarsanalyse, sensor/EK, beskyttelse og beredskap"}]}]},{name:"Justis- og beredskapsdepartementet (JD)",children:[{name:"Politidirektoratet (POD)",children:[{name:"Oslo politidistrikt",children:[{name:"Politimester og stab",children:[{name:"Kommunikasjonsstab"},{name:"HR- og HMS-stab"},{name:"Virksomhetsstyringsstab"}]},{name:"Felles enhet for operativ tjeneste",children:[{name:"Operasjonssentralen"},{name:"Ordensavdelinger"},{name:"Hundetjenesten"}]},{name:"Felles enhet for nasjonale beredskapsressurser (Taraldrud)",children:[{name:"Beredskapstroppen («Delta»)"},{name:"Bombegruppen / Politiets bombetjeneste (CBRN)"},{name:"Politihelikoptertjenesten (AW169)"},{name:"Krise- og gisselforhandlertjenesten"},{name:"Seksjon for taktisk støtte"}]},{name:"Felles kriminalenhet",children:[{name:"Seksjon for vold og seksualforbrytelser"},{name:"Seksjon for økonomisk kriminalitet"},{name:"Seksjon for organisert kriminalitet"},{name:"Seksjon for ungdomskriminalitet"}]},{name:"Felles enhet for etterretning og etterforskning",children:[{name:"Etterretningsavdeling"},{name:"Analyseseksjon"}]},{name:"Felles enhet for forebygging",children:[{name:"Forebyggende avdelinger"},{name:"SLT-koordinering"}]},{name:"Felles enhet for påtale",children:[{name:"Påtaleseksjoner"}]},{name:"Felles enhet for utlending og forvaltning",children:[{name:"Pass og våpenforvaltning"},{name:"Utlendingsseksjon"}]},{name:"Felles enhet for sivil rettspleie (Namsfogden)",children:[{name:"Namsseksjon"},{name:"Gjeldsrådgivning"}]},{name:"Geografiske driftsenheter",children:[{name:"Enhet sentrum (Grønland, Sentrum politistasjon)"},{name:"Enhet vest (Majorstuen, Asker, Bærum)"},{name:"Enhet øst (Oslo øst politistasjon, fra 2025)"}]}]},{name:"Øst politidistrikt"},{name:"Innlandet politidistrikt"},{name:"Sør-Øst politidistrikt"},{name:"Agder politidistrikt"},{name:"Sør-Vest politidistrikt"},{name:"Vest politidistrikt"},{name:"Møre og Romsdal politidistrikt"},{name:"Trøndelag politidistrikt"},{name:"Nordland politidistrikt"},{name:"Troms politidistrikt"},{name:"Finnmark politidistrikt"},{name:"Kripos – Nasjonal enhet for alvorlig kriminalitet",children:[{name:"Etterforskningsavdelingen",children:[{name:"Etterretningsseksjonen"},{name:"Seksjon for kalde saker («cold case»)"},{name:"Seksjon for organisert kriminalitet"},{name:"Seksjon for internettrelaterte seksuallovbrudd"},{name:"Voldsseksjonen"}]},{name:"Avdeling for kriminalteknikk og ID (NKL)",children:[{name:"Seksjon for kriminalteknikk (åstedsundersøkelser)"},{name:"Seksjon for biometri og ansiktssammenligning"},{name:"Seksjon for DNA og narkotikaanalyse"},{name:"Seksjon for brann, kjemi og dokumenter"},{name:"Fingeravtrykksseksjonen"}]},{name:"Avdeling for fellesoperative tjenester",children:[{name:"Desken (døgnbemannet responssenter)"},{name:"Seksjon for operativ etterforskningsbistand"},{name:"Seksjon for tilstedeværelse på internett"},{name:"Vitnebeskyttelse"}]},{name:"Nasjonalt cyberkrimsenter (NC3)",children:[{name:"Seksjon for elektroniske spor",children:[{name:"Metodeutvikling"},{name:"Elektronikklab"},{name:"Kunstig intelligens og anvendt teknologi"}]},{name:"Seksjon for datakriminalitet"},{name:"Seksjon for seksuelle overgrep mot barn",children:[{name:"Etterretning"},{name:"Innledende etterforskning"},{name:"Forebygging, ID og fagutvikling"}]},{name:"Seksjon for etterforskningsbistand / bistandslab"},{name:"Seksjon for inntak og digital innsats"}]},{name:"Internasjonalt samarbeid",children:[{name:"Interpol-seksjonen (NCB Oslo)"},{name:"Europol-seksjonen"},{name:"SIRENE-seksjonen (Schengen)"}]},{name:"Retts- og påtaleavdelingen"},{name:"Administrasjon og stab",children:[{name:"HR-seksjonen"},{name:"Kommunikasjonsstab"},{name:"Økonomiseksjon"}]}]},{name:"Økokrim",children:[{name:"Etterforskningsavdeling (økonomisk kriminalitet)"},{name:"Miljøkrimavdelingen"},{name:"Utbytteseksjonen (inndragning)"}]},{name:"Politihøgskolen (PHS)"},{name:"Utrykningspolitiet (UP)"}]},{name:"Politiets sikkerhetstjeneste (PST)",children:[{name:"Kontraterroravdelingen",children:[{name:"Islamistisk ekstremisme"},{name:"Høyreekstremisme"},{name:"Andre ekstremismemiljøer"},{name:"Forebyggende tiltak og radikalisering"}]},{name:"Kontraetterretningsavdelingen",children:[{name:"Spionasje og fremmed etterretning"},{name:"Påvirkningsoperasjoner"},{name:"Proliferasjon (masseødeleggelsesvåpen)"}]},{name:"Livvakttjenesten",children:[{name:"Beskyttelse av regjeringen"},{name:"Beskyttelse av Stortinget"},{name:"Beskyttelse av andre truede personer"}]},{name:"Analyse- og etterretningsavdelingen",children:[{name:"Trusselvurderinger (årlige og løpende)"},{name:"Strategisk analyse"},{name:"Situasjonsforståelse"}]},{name:"Operativ avdeling",children:[{name:"Spaning og skjulte metoder"},{name:"Teknisk innhenting"}]},{name:"Teknisk avdeling",children:[{name:"IKT-sikkerhet og digitale verktøy"},{name:"Teknisk støtte til operasjoner"}]},{name:"Administrativ avdeling",children:[{name:"HR og kompetanse"},{name:"Økonomi"},{name:"Juridisk seksjon"}]},{name:"Regionale PST-enheter",children:[{name:"PST Øst politidistrikt"},{name:"PST Innlandet politidistrikt"},{name:"PST Sør-Øst politidistrikt"},{name:"PST Agder politidistrikt"},{name:"PST Sør-Vest politidistrikt"},{name:"PST Vest politidistrikt"},{name:"PST Møre og Romsdal politidistrikt"},{name:"PST Trøndelag politidistrikt"},{name:"PST Nordland politidistrikt"},{name:"PST Troms politidistrikt"},{name:"PST Finnmark politidistrikt"},{name:"PST Svalbard"}]}]},{name:"Direktoratet for samfunnssikkerhet og beredskap (DSB)",children:[{name:"Sivilforsvaret (20 distrikter, 281 innsatsenheter)",children:[{name:"Oslo og Akershus"},{name:"Østfold"},{name:"Hedmark"},{name:"Oppland"},{name:"Buskerud"},{name:"Vestfold"},{name:"Telemark"},{name:"Aust-Agder"},{name:"Vest-Agder"},{name:"Rogaland"},{name:"Hordaland"},{name:"Sogn og Fjordane"},{name:"Møre og Romsdal"},{name:"Sør-Trøndelag"},{name:"Nord-Trøndelag"},{name:"Nordland"},{name:"Midtre Hålogaland"},{name:"Troms"},{name:"Vest-Finnmark"},{name:"Øst-Finnmark"}]},{name:"Nødnett (nødkommunikasjonsinfrastruktur)"},{name:"Norges brannskole"},{name:"Nasjonalt utdanningssenter for samfunnssikkerhet"},{name:"Eltilsyn (5 regionale kontorer)"}]},{name:"Nasjonal sikkerhetsmyndighet (NSM)",children:[{name:"Nasjonalt cybersikkerhetssenter (NCSC)"},{name:"Forebyggende sikkerhetstjeneste"},{name:"Sikkerhetsklareringer"}]},{name:"Hovedredningssentralen (HRS)",children:[{name:"HRS Nord-Norge (Bodø)"},{name:"HRS Sør-Norge (Stavanger)"}]},{name:"Kriminalomsorgsdirektoratet",children:[{name:"Fengslene (høy/lav sikkerhet)"},{name:"Friomsorgen"}]}]},{name:"Helse- og omsorgsdepartementet (HOD)",children:[{name:"Helsedirektoratet",children:[{name:"Helse Sør-Øst RHF",children:[{name:"Oslo universitetssykehus"},{name:"Akershus universitetssykehus"},{name:"Sykehuset Østfold m.fl."}]},{name:"Helse Vest RHF",children:[{name:"Haukeland universitetssjukehus"},{name:"Stavanger universitetssjukehus m.fl."}]},{name:"Helse Midt-Norge RHF",children:[{name:"St. Olavs hospital m.fl."}]},{name:"Helse Nord RHF",children:[{name:"Universitetssykehuset Nord-Norge (UNN) m.fl."}]},{name:"AMK-sentraler (akuttmedisinsk kommunikasjon)"},{name:"Kommunale helsetjenester og legevakt"}]},{name:"Folkehelseinstituttet (FHI)",children:[{name:"Smittevern og epidemiologi"},{name:"Beredskapslagre"}]},{name:"Norsk Helsenett",children:[{name:"Helsenettet, e-helse-infrastruktur"}]}]},{name:"Finansdepartementet (FIN)",children:[{name:"Tolletaten",children:[{name:"Grensedivisjonen",children:[{name:"Grensekontrollsteder (Svinesund, Ørje, Magnor, Gardermoen m.fl.)"},{name:"Tollsteder langs grensen, havner og flyplasser"},{name:"Hundetjenesten"}]},{name:"Etterretningsdivisjonen",children:[{name:"Analyse og etterretning mot smugling/org. kriminalitet"}]},{name:"Vareførselsdivisjonen",children:[{name:"Klassifisering, dokumentkontroll, etterkontroll"}]},{name:"IT-divisjonen",children:[{name:"Digitalisering og systemdrift"}]},{name:"Administrasjonsdivisjonen",children:[{name:"HR, økonomi og støttefunksjoner"}]}]},{name:"Finanstilsynet",children:[{name:"Tilsyn bank, forsikring, verdipapir"}]},{name:"Norges Bank",children:[{name:"Betalingssystemer (NBO/NICS)"},{name:"Valutareserver og beredskapslagre"},{name:"Seddeltrykkeriet"}]},{name:"Skatteetaten",children:[{name:"Folkeregisteret (kritisk samfunnsdata)"},{name:"Regionskontorer (5 regioner)"}]}]},{name:"Samferdselsdepartementet (SD)",children:[{name:"Statens vegvesen",children:[{name:"Vegtrafikksentraler (5 regionale)"},{name:"Beredskap veinett"}]},{name:"Jernbanedirektoratet / Bane NOR",children:[{name:"Togledingssentraler"},{name:"Infrastrukturberedskap jernbane"}]},{name:"Avinor",children:[{name:"43 flyplasser (Gardermoen, Flesland, Tromsø m.fl.)"},{name:"Flysikringstjenester"}]},{name:"Kystverket",children:[{name:"Sjøtrafikksentraler (VTS)"},{name:"Oljevernberedskap (NOFO-samarbeid)"},{name:"Fyrvesen og navigasjonsinfrastruktur"}]},{name:"Nasjonal kommunikasjonsmyndighet (Nkom)",children:[{name:"Frekvensforvaltning"},{name:"Telekomsikkerhet og beredskap"}]}]},{name:"Olje- og energidepartementet (OED)",children:[{name:"Norges vassdrags- og energidirektorat (NVE)",children:[{name:"Kraftforsyningens beredskapsorganisasjon (KBO)",children:[{name:"Regionale kraftforsyningsberedskapssjefer"}]},{name:"Flom- og skredvarsling"},{name:"Damtilsyn"}]},{name:"Statnett",children:[{name:"Sentralnettet (landsdekkende strømnett)"},{name:"Driftssentraler"}]},{name:"Petroleumstilsynet (Ptil)",children:[{name:"Tilsyn og beredskap på norsk sokkel"}]}]},{name:"Nærings- og fiskeridepartementet (NFD)",children:[{name:"Mattilsynet",children:[{name:"Regionale avdelinger (5 regioner)"},{name:"Grensekontrollstasjoner"},{name:"Matforsyningssikkerhet og dyrehelseberedskap"}]},{name:"Norsk Romsenter",children:[{name:"Satellittkommunikasjon og jordobservasjon"},{name:"Svalbard Satellite Station (SvalSat)"}]},{name:"Sjøfartsdirektoratet",children:[{name:"Fartøystilsyn og sjøsikkerhet"}]}]},{name:"Kommunal- og distriktsdepartementet (KDD)",children:[{name:"Statsforvalterne (10 embeter)",children:[{name:"Østfold, Buskerud, Oslo og Akershus"},{name:"Innlandet"},{name:"Vestfold og Telemark"},{name:"Agder"},{name:"Rogaland"},{name:"Vestland"},{name:"Møre og Romsdal"},{name:"Trøndelag"},{name:"Nordland"},{name:"Troms og Finnmark"}]},{name:"Kommunene (356 kommuner)",children:[{name:"Kommunale kriseteam og beredskapsråd"},{name:"Brann- og redningstjenestene (ca. 280 brannvesen)"},{name:"Kommunale vannverk og VA-beredskap"}]}]},{name:"Utenriksdepartementet (UD)",children:[{name:"Utenrikstjenesten",children:[{name:"Ambassader og konsulater (ca. 100 stasjoner)"},{name:"Krisehåndtering norske borgere i utlandet"}]},{name:"Norad",children:[{name:"Humanitær bistand og kriseberedskap internasjonalt"}]},{name:"NATO-delegasjonen (Brussel)",children:[{name:"Sivil beredskapskoordinering med NATO"}]}]},{name:"Barne- og familiedepartementet (BFD)",children:[{name:"Beredskap for sårbare grupper",children:[{name:"Barnevernet"},{name:"Krisesenter"}]},{name:"FORF – Frivillige Organisasjoners Redningsfaglige Forum",children:[{name:"Røde Kors Hjelpekorps",children:[{name:"Ca. 350 lokale hjelpekorps – søk, redning, førstehjelp"}]},{name:"Norsk Folkehjelp Sanitet",children:[{name:"Ca. 120 lokallag – sanitet, søk og redning"}]},{name:"Redningsselskapet (RS)",children:[{name:"Ca. 50 redningsskøyter – sjøredning langs kysten"}]},{name:"Norske Redningshunder (NRH)",children:[{name:"Søkshunder – savnede i skog, fjell, skred og ruiner"}]},{name:"Norsk Radio Relæ Liga (NRRL)",children:[{name:"Nødsamband via radioamatører"}]},{name:"Speidernes Beredskapsgrupper (SBG)",children:[{name:"Beredskaps- og leirressurser"}]},{name:"Norsk Grotteforbund (NGF)",children:[{name:"Grotteredning og spesialisert søk under bakken"}]},{name:"NLFs Flytjeneste",children:[{name:"Søk fra luften med småfly"}]},{name:"Norske Alpine Redningsgrupper (NARG)",children:[{name:"Fjellredning og alpine spesialoperasjoner"}]}]},{name:"Norske Kvinners Sanitetsforening",children:[{name:"Førstehjelpsgrupper og helsefremmende beredskap"}]}]}]};
+
+// ══════════════════════════════════════
+const chevronSVG=`<svg class="chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+let isSearchActive = false;
+let activeHoverNode = null;
+
+function getAncestorNames(li){const n=[];let el=li.parentElement?.closest('li');while(el){const l=el.querySelector(':scope>.node .label');if(l)n.unshift(l.textContent);el=el.parentElement?.closest('li');}return n;}
+
+function buildTree(node,level=0){
+  const li=document.createElement('li');li.className=`level-${level}`;
+  if(level<=1)li.classList.add('expanded');
+  const hasKids=node.children&&node.children.length>0;
+  const span=document.createElement('span');
+  span.className='node'+(hasKids?' has-children':'');
+  span.innerHTML=(hasKids?chevronSVG:'')+`<span class="label">${node.name}</span>`;
+  if(hasKids){
+    const b=document.createElement('span');b.className='badge';b.textContent=node.children.length;span.appendChild(b);
+    span.addEventListener('click',()=>li.classList.toggle('expanded'));
+  }
+
+  // ── Hover: nullstill søk, vis aktiv, vis info ──
+  span.addEventListener('mouseenter',()=>{
+    // Fjern forrige aktiv
+    if(activeHoverNode && activeHoverNode !== span) activeHoverNode.classList.remove('active-hover');
+    span.classList.add('active-hover');
+    activeHoverNode = span;
+
+    // Nullstill søk hvis aktivt
+    if(isSearchActive) resetSearch();
+
+    // Vis info-panel
+    const label=span.querySelector('.label');
+    if(label) showInfo(label.textContent, li);
+  });
+  span.addEventListener('mouseleave',()=>{
+    // Ikke fjern active-hover her – vi beholder den til neste hover
+  });
+
+  li.appendChild(span);
+  if(hasKids){const ul=document.createElement('ul');node.children.forEach(c=>ul.appendChild(buildTree(c,level+1)));li.appendChild(ul);}
+  return li;
+}
+
+const treeEl=document.getElementById('tree');
+const rootUl=document.createElement('ul');
+rootUl.appendChild(buildTree(data));
+treeEl.appendChild(rootUl);
+
+// ═══════════════  ══════════════════════
+// Søk
+// ══════════════════════════════════════
+const searchInput=document.getElementById('search');
+const searchTextEl=document.getElementById('searchText');
+const searchNavEl=document.getElementById('searchNav');
+const searchPosEl=document.getElementById('searchPos');
+let searchTimeout,searchMatches=[],searchIndex=0;
+
+searchInput.addEventListener('input',()=>{clearTimeout(searchTimeout);searchTimeout=setTimeout(()=>doSearch(searchInput.value),250);});
+searchInput.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape')resetSearch();
+  if(e.key==='Enter'){e.preventDefault();if(searchMatches.length)navigateSearch(1);}
+});
+
+function doSearch(term){
+  clearSearchVisuals();
+  if(!term||term.length<2){searchTextEl.textContent='';searchNavEl.classList.remove('visible');isSearchActive=false;expandToLevel(1);return;}
+
+  isSearchActive=true;
+  const lower=term.toLowerCase();
+  const allLis=document.querySelectorAll('.tree li');
+  allLis.forEach(li=>{li.classList.remove('expanded');li.classList.add('dim');});
+
+  document.querySelectorAll('.tree .label').forEach(label=>{
+    if(label.textContent.toLowerCase().includes(lower)){
+      const li=label.closest('li');
+      label.classList.add('highlight');
+      searchMatches.push(li);
+      li.classList.remove('dim');li.classList.add('search-path');
+      let p=li.parentElement?.closest('li');
+      while(p){p.classList.add('expanded','search-path');p.classList.remove('dim');p=p.parentElement?.closest('li');}
+      if(li.querySelector(':scope>ul')){li.classList.add('expanded');li.querySelectorAll(':scope>ul>li').forEach(c=>c.classList.remove('dim'));}
+    }
+  });
+
+  if(searchMatches.length>0){
+    searchTextEl.textContent=`${searchMatches.length} treff`;
+    searchNavEl.classList.add('visible');
+    searchIndex=0;scrollToMatch(0);
+  }else{searchTextEl.textContent='Ingen treff';searchNavEl.classList.remove('visible');}
+}
+
+function navigateSearch(dir){if(!searchMatches.length)return;searchIndex=(searchIndex+dir+searchMatches.length)%searchMatches.length;scrollToMatch(searchIndex);}
+
+function scrollToMatch(idx){
+  document.querySelectorAll('.search-active').forEach(el=>el.classList.remove('search-active'));
+  const li=searchMatches[idx];li.classList.add('search-active');
+  const node=li.querySelector(':scope>.node');
+  if(node)node.scrollIntoView({behavior:'smooth',block:'center'});
+  searchPosEl.textContent=`${idx+1} / ${searchMatches.length}`;
+  const lbl=li.querySelector(':scope>.node .label');
+  if(lbl)showInfo(lbl.textContent,li);
+}
+
+function clearSearchVisuals(){
+  document.querySelectorAll('.highlight').forEach(el=>el.classList.remove('highlight'));
+  document.querySelectorAll('.search-path').forEach(el=>el.classList.remove('search-path'));
+  document.querySelectorAll('.search-active').forEach(el=>el.classList.remove('search-active'));
+  document.querySelectorAll('.dim').forEach(el=>el.classList.remove('dim'));
+  searchMatches=[];searchIndex=0;
+}
+
+function resetSearch(){
+  searchInput.value='';searchTextEl.textContent='';searchNavEl.classList.remove('visible');
+  isSearchActive=false;
+  clearSearchVisuals();
+  expandToLevel(1);
+}
+
+// ══════════════════════════════════════
+// Nivåknapper
+// ══════════════════════════════════════
+function getLevel(li){return parseInt([...li.classList].find(c=>c.startsWith('level-'))?.replace('level-','')||'99');}
+function expandToLevel(m){clearSearchVisuals();isSearchActive=false;document.querySelectorAll('.tree li').forEach(li=>{if(getLevel(li)<=m)li.classList.add('expanded');else li.classList.remove('expanded');});}
+function expandAll(){clearSearchVisuals();isSearchActive=false;document.querySelectorAll('.tree li').forEach(li=>li.classList.add('expanded'));}
+function collapseAll(){clearSearchVisuals();isSearchActive=false;document.querySelectorAll('.tree li').forEach(li=>{if(getLevel(li)===0)li.classList.add('expanded');else li.classList.remove('expanded');});}
+
+// ══════════════════════════════════════
+// Info-panel
+// ══════════════════════════════════════
+const popupCol=document.getElementById('popupCol');
+const infoTitle=document.getElementById('infoTitle');
+const infoBody=document.getElementById('infoBody');
+const wikiCache={};
+let currentInfoName='';
+
+function closePanel(){
+  popupCol.classList.remove('visible');popupCol.classList.add('hidden');
+  currentInfoName='';
+  if(activeHoverNode){activeHoverNode.classList.remove('active-hover');activeHoverNode=null;}
+}
+
+function cleanTerm(r){let t=r.replace(/\s*\(.*?\)\s*/g,' ').replace(/–.*$/g,'').replace(/«|»/g,'').replace(/\b(kl\.|m\.fl\.|ca\.|fra)\b/gi,'').replace(/\d{3,}/g,'').replace(/\s{2,}/g,' ').trim();if(t.length<3)t=r.replace(/\s*\(.*?\)\s*/g,' ').trim();return t;}
+
+async function fetchWiki(term){
+  const k=term.toLowerCase();if(wikiCache[k])return wikiCache[k];
+  const s=cleanTerm(term);
+  try{
+    const r=await fetch(`https://no.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(s)}&limit=3&namespace=0&format=json&origin=*`);
+    const d=await r.json();
+    if(d[1]?.length){
+      const t=d[1][0],u=d[3][0];
+      const sr=await fetch(`https://no.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(t)}`);
+      if(sr.ok){const sd=await sr.json();const res={found:true,title:sd.title||t,extract:sd.extract||'',url:u,thumb:sd.thumbnail?.source||null};wikiCache[k]=res;return res;}
+    }
+    const er=await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(s)}&limit=3&namespace=0&format=json&origin=*`);
+    const ed=await er.json();
+    if(ed[1]?.length){
+      const et=ed[1][0],eu=ed[3][0];
+      const esr=await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(et)}`);
+      if(esr.ok){const esd=await esr.json();const res={found:true,title:esd.title||et,extract:esd.extract||'',url:eu,thumb:esd.thumbnail?.source||null,lang:'en'};wikiCache[k]=res;return res;}
+    }
+  }catch(e){console.warn(e);}
+  const res={found:false};wikiCache[k]=res;return res;
+}
+
+function showInfo(name,li){
+  currentInfoName=name;
+  popupCol.classList.remove('hidden');popupCol.classList.add('visible');
+  const anc=getAncestorNames(li);
+  const path=anc.map(a=>`<span>${a}</span><span class="sep"> › </span>`).join('')+`<span class="current">${name}</span>`;
+  infoTitle.textContent=name;
+  infoBody.innerHTML=`<div class="hierarchy">${path}</div><div class="loading">⏳ Henter informasjon fra Wikipedia...</div>`;
+
+  fetchWiki(name).then(info=>{
+    if(currentInfoName!==name)return;
+    if(info.found){
+      const th=info.thumb?`<img class="thumb" src="${info.thumb}" alt="">`:'';
+      const ln=info.lang==='en'?' <em style="color:#6aa0b8;font-size:0.85rem;">(English)</em>':'';
+      infoBody.innerHTML=`<div class="hierarchy">${path}</div>${th}<div class="wiki-extract">${info.extract}</div><a class="wiki-link" href="${info.url}" target="_blank" rel="noopener">📖 Les mer på Wikipedia${ln}</a>`;
+    }else{
+      infoBody.innerHTML=`<div class="hierarchy">${path}</div><div style="color:#8cc0d8;margin-bottom:12px;">Ingen Wikipedia-artikkel funnet for denne enheten.</div><a class="wiki-link" href="https://www.google.com/search?q=${encodeURIComponent(name+' Norge totalforsvar')}" target="_blank" rel="noopener">🔍 Søk på Google</a>`;
+    }
+  });
+}
+
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape'){closePanel();if(document.activeElement===searchInput)resetSearch();}});
+</script>
+</body>
+</html>
