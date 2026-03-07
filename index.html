@@ -389,6 +389,19 @@ async function fetchWiki(term){
   const res={found:false};wikiCache[k]=res;return res;
 }
 
+async function fetchDuckDuckGo(term){
+  try{
+    const dq=encodeURIComponent(term+' Norge');
+    const r=await fetch(`https://api.duckduckgo.com/?q=${dq}&format=json&no_html=1&skip_disambig=1`);
+    if(!r.ok)return{found:false};
+    const dd=await r.json();
+    if(dd&&dd.AbstractText){
+      return{found:true,title:dd.Heading||term,extract:dd.AbstractText,url:dd.AbstractURL||`https://duckduckgo.com/?q=${encodeURIComponent(term+' Norge')}`,source:'duckduckgo'};
+    }
+  }catch(e){console.warn('DuckDuckGo error',e);}
+  return{found:false};
+}
+
 function showInfo(name,li){
   currentInfoName=name;
   popupCol.classList.remove('hidden');popupCol.classList.add('visible');
@@ -408,7 +421,21 @@ function showInfo(name,li){
         infoBody.innerHTML=`<div class="hierarchy">${path}</div>${th}<div class="wiki-extract">${info.extract}</div><a class="wiki-link" href="${info.url}" target="_blank" rel="noopener">📖 Les mer på Wikipedia${ln}</a>`;
       }
     }else{
-      infoBody.innerHTML=`<div class="hierarchy">${path}</div><div style="color:#8cc0d8;margin-bottom:12px;">Ingen Wikipedia-artikkel funnet for denne enheten.</div><a class="wiki-link" href="https://www.google.com/search?q=${encodeURIComponent(name+' Norge totalforsvar')}" target="_blank" rel="noopener">🔍 Søk på Google</a>`;
+      infoBody.innerHTML=`<div class="hierarchy">${path}</div><div style="color:#8cc0d8;margin-bottom:12px;">Ingen Wikipedia-artikkel funnet for denne enheten.</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"><button class="wiki-link" id="duckBtn">🔍 Søk med DuckDuckGo</button><a class="wiki-link" href="https://www.google.com/search?q=${encodeURIComponent(name+' Norge totalforsvar')}" target="_blank" rel="noopener">🔍 Søk på Google</a></div>`;
+      const duckBtn=document.getElementById('duckBtn');
+      if(duckBtn){
+        duckBtn.addEventListener('click',async()=>{
+          infoBody.innerHTML=`<div class="hierarchy">${path}</div><div class="loading">⏳ Henter søkeresultat fra DuckDuckGo...</div>`;
+          const ddInfo=await fetchDuckDuckGo(name);
+          if(currentInfoName!==name)return;
+          if(ddInfo.found){
+            const th=ddInfo.thumb?`<img class="thumb" src="${ddInfo.thumb}" alt="">`:'';
+            infoBody.innerHTML=`<div class="hierarchy">${path}</div>${th}<div class="wiki-extract">${ddInfo.extract}</div><a class="wiki-link" href="${ddInfo.url}" target="_blank" rel="noopener">🔍 Les mer på DuckDuckGo</a>`;
+          }else{
+            infoBody.innerHTML=`<div class="hierarchy">${path}</div><div style="color:#8cc0d8;margin-bottom:12px;">Ingen treff fra DuckDuckGo.</div><a class="wiki-link" href="https://duckduckgo.com/?q=${encodeURIComponent(name+' Norge')}" target="_blank" rel="noopener">🔍 Søk på DuckDuckGo</a>`;
+          }
+        });
+      }
     }
   });
 }
