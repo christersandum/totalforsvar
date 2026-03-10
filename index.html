@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Norsk Totalforsvar – Interaktivt hierarki</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #080d12;
+            color: #d8e4ef;
+            padding: 24px;
+            line-height: 1.6;
+        }
+
+        h1 { text-align: center; font-size: 2rem; margin-bottom: 6px; color: #fff; }
+        .subtitle { text-align: center; color: #8aa4b8; margin-bottom: 24px; font-size: 1.05rem; }
+
+        .top-bar {
+            max-width: 1440px; margin: 0 auto 16px; display: flex; gap: 28px; align-items: flex-start;
+        }
+        .top-left { flex: 1; min-width: 0; max-width: 860px; }
+        .top-right { width: 440px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+
+        .search-box { display: flex; gap: 8px; }
+        .search-box input {
+            flex: 1; padding: 9px 14px; border-radius: 8px;
+            border: 1px solid #1a3350; background: #101c28; color: #d8e4ef; font-size: 0.95rem; outline: none;
+        }
+        .search-box input:focus { border-color: #3a9cc8; box-shadow: 0 0 0 2px rgba(58,156,200,0.2); }
+        .search-box input::placeholder { color: #4e6e82; }
+
+        .search-box button, .toolbar button, .search-nav button, .sit-buttons button {
+            padding: 8px 14px; border-radius: 8px; border: 1px solid #1a3350;
+            background: #101c28; color: #a4d4ff; cursor: pointer; font-size: 0.9rem; transition: background 0.15s;
+        }
+        .search-box button:hover, .toolbar button:hover, .search-nav button:hover, .sit-buttons button:hover { background: #17405e; }
+
+        .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        .toolbar button { font-size: 0.86rem; padding: 7px 12px; }
+
+        .search-count { font-size: 0.92rem; color: #f0b429; min-height: 1.4em; margin-top: 6px; }
+
+        .sit-buttons { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .sit-buttons button { font-size: 0.88rem; padding: 8px 14px; }
+        .sit-buttons button.reset-btn { border-color: #5a2020; color: #e88; }
+        .sit-buttons button.reset-btn:hover { background: #3a1515; }
+
+        /* ── Toggle filter button ── */
+        .sit-buttons button.toggle-btn { border-color: #1a5050; color: #7ed8c8; }
+        .sit-buttons button.toggle-btn:hover { background: #0e3535; }
+        .sit-buttons button.toggle-btn.active { background: #1a5050; color: #a0ffe0; outline: 2px solid #50d0b0; outline-offset: 1px; }
+
+        .sit-name { font-size: 0.88rem; color: #8aa4b8; }
+        .sit-name strong { color: #f0b429; }
+
+        .legend { display: flex; gap: 14px; align-items: center; font-size: 0.85rem; color: #8aa4b8; }
+        .legend-dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+        .legend-dot.default { background: #17405e; }
+        .legend-dot.orange { background: #e67e22; }
+        .legend-dot.green { background: #27ae60; }
+
+        .main-layout {
+            display: flex; max-width: 1440px; margin: 0 auto; gap: 28px; align-items: flex-start; position: relative;
+        }
+        .tree-column { flex: 1; min-width: 0; max-width: 860px; }
+
+        .popup-column {
+            width: 440px; flex-shrink: 0; position: sticky; top: 24px;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .popup-column.hidden { opacity: 0; pointer-events: none; transform: translateX(20px); }
+        .popup-column.visible { opacity: 1; pointer-events: auto; transform: translateX(0); }
+
+        .search-nav {
+            display: none; position: fixed; bottom: 24px; right: 24px; z-index: 100;
+            gap: 8px; align-items: center;
+            background: #101c28; border: 1px solid #1a3350; border-radius: 10px;
+            padding: 10px 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+        }
+        .search-nav.visible { display: inline-flex; }
+        .search-nav button { padding: 8px 14px; font-size: 0.92rem; }
+        .search-nav span { font-size: 0.92rem; color: #f0b429; min-width: 60px; text-align: center; font-weight: 600; }
+
+        .tree { width: 100%; }
+        .tree ul { list-style: none; padding-left: 0; }
+        .tree ul ul { padding-left: 26px; border-left: 2px solid #1a3350; margin-left: 14px; overflow: hidden; }
+        .tree li { margin: 4px 0; }
+
+        /* ── Filter mode: hide unassigned ── */
+        .tree.filter-active li.status-none { display: none; }
+        .tree.filter-active li.status-deltager,
+        .tree.filter-active li.status-samhandling { display: list-item; }
+        /* Ensure parents of visible items stay visible */
+        .tree.filter-active li.has-active-child { display: list-item; }
+
+        .node {
+            display: inline-flex; align-items: center; gap: 9px;
+            padding: 8px 16px; border-radius: 8px;
+            cursor: pointer; font-size: 1rem;
+            transition: background 0.15s, transform 0.1s, outline-color 0.3s, opacity 0.25s;
+            user-select: none; position: relative;
+            outline: 2px solid transparent;
+        }
+        .node:hover { background: rgba(255,255,255,0.08); transform: translateX(3px); }
+
+        .status-deltager > .node { background: #7a4a0a !important; color: #ffe0a0 !important; }
+        .status-samhandling > .node { background: #0e4a2a !important; color: #a0ffc8 !important; }
+
+        .level-0 > .node { font-weight: 700; font-size: 1.2rem; padding: 12px 20px; border-radius: 10px; }
+        .level-1 > .node { font-weight: 600; font-size: 1.1rem; }
+        .level-2 > .node { font-size: 1.02rem; }
+        .level-3 > .node { font-size: 0.96rem; }
+        .level-4 > .node { font-size: 0.92rem; }
+        .level-5 > .node { font-size: 0.9rem; }
+        .level-6 > .node { font-size: 0.88rem; }
+
+        .level-0.status-none > .node { background: #17405e; color: #b0daff; }
+        .level-1.status-none > .node { background: #17405e; color: #b0daff; }
+        .level-2.status-none > .node { background: #142f48; color: #8ccef5; }
+        .level-3.status-none > .node { background: #10243a; color: #6cc0e8; }
+        .level-4.status-none > .node { background: #0c1c2e; color: #55b4da; }
+        .level-5.status-none > .node { background: #0a1520; color: #7ebdd4; }
+        .level-6.status-none > .node { background: transparent; color: #6ca8c4; }
+
+        .chevron { display: inline-block; width: 20px; height: 20px; flex-shrink: 0; transition: transform 0.25s ease; opacity: 0.7; }
+        .node:hover .chevron { opacity: 1; }
+        .expanded > .node > .chevron { transform: rotate(90deg); }
+
+        .tree li:not(.expanded) > ul { max-height: 0; opacity: 0; pointer-events: none; transition: max-height 0.35s, opacity 0.25s; }
+        .tree li.expanded > ul { max-height: 50000px; opacity: 1; pointer-events: auto; transition: max-height 0.5s, opacity 0.3s 0.05s; }
+
+        .badge { font-size: 0.78rem; background: rgba(255,255,255,0.12); color: #8ab4cc; padding: 2px 8px; border-radius: 10px; margin-left: 5px; }
+        .node.active-hover { outline: 2px solid #2ea8d0 !important; }
+
+        .highlight .label { background: #6b4400 !important; border-radius: 4px; padding: 2px 6px; color: #ffd966 !important; }
+        .search-path > .node { border-left: 3px solid #f0b429; }
+        .search-active > .node { outline: 2px solid #f0b429 !important; }
+        .dim > .node { opacity: 0.45; }
+
+        .info-panel {
+            background: #101c28; border: 1px solid #1e4060; border-radius: 14px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; min-height: 160px;
+            display: flex; flex-direction: column;
+        }
+        .info-panel-header {
+            background: #17405e; padding: 14px 20px; font-weight: 600; font-size: 1.08rem;
+            color: #b0daff; border-bottom: 1px solid #1e4060;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .info-panel-header .close-btn {
+            cursor: pointer; color: #8ccef5; font-size: 1.3rem; background: none;
+            border: none; padding: 2px 8px; line-height: 1; border-radius: 4px; transition: background 0.15s;
+        }
+        .info-panel-header .close-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+        .status-bar {
+            display: flex; align-items: center; gap: 8px; padding: 10px 20px;
+            background: #0c1620; border-bottom: 1px solid #1a3350;
+        }
+        .status-bar .status-label { font-size: 0.85rem; color: #8aa4b8; margin-right: 2px; white-space: nowrap; }
+        .status-bar button {
+            padding: 6px 14px; border-radius: 6px; border: 2px solid transparent;
+            cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.15s; white-space: nowrap;
+        }
+        .status-bar button.btn-samhandling { background: #0e4a2a; color: #a0ffc8; border-color: #1a7a40; }
+        .status-bar button.btn-samhandling:hover { background: #1a6a3a; }
+        .status-bar button.btn-samhandling.active { outline: 3px solid #50e890; outline-offset: 2px; }
+        .status-bar button.btn-deltager { background: #7a4a0a; color: #ffe0a0; border-color: #a06010; }
+        .status-bar button.btn-deltager:hover { background: #9a5a0a; }
+        .status-bar button.btn-deltager.active { outline: 3px solid #ffb347; outline-offset: 2px; }
+        .status-bar button.btn-reset-status { background: #3a1515; color: #e88; border-color: #5a2020; font-size: 0.8rem; padding: 5px 10px; }
+        .status-bar button.btn-reset-status:hover { background: #4a2020; }
+
+        .info-panel-body {
+            padding: 18px 20px; font-size: 0.98rem; color: #c8dce8;
+            overflow-y: auto; max-height: 72vh; flex: 1; line-height: 1.7;
+        }
+        .info-panel-body a { color: #5cc8f0; text-decoration: none; }
+        .info-panel-body a:hover { text-decoration: underline; color: #90e0ff; }
+        .info-panel-body .wiki-extract { margin-bottom: 12px; }
+        .info-panel-body .wiki-link {
+            display: inline-block; margin-top: 8px; font-size: 0.92rem;
+            padding: 6px 14px; background: #17405e; border-radius: 6px; color: #b0daff;
+        }
+        .info-panel-body .wiki-link:hover { background: #1e5070; }
+        .info-panel-body .loading { color: #6aa0b8; font-style: italic; }
+        .info-panel-body .hierarchy {
+            font-size: 0.88rem; color: #5aaccc; margin-bottom: 14px;
+            padding-bottom: 10px; border-bottom: 1px solid #1a3350; line-height: 1.5;
+        }
+        .info-panel-body .hierarchy span { color: #7abccc; }
+        .info-panel-body .hierarchy .current { color: #f0b429; font-weight: 600; }
+        .info-panel-body .hierarchy .sep { color: #3a5a70; margin: 0 4px; }
+        .info-panel-body img.thumb { float: right; max-width: 120px; max-height: 100px; border-radius: 8px; margin: 0 0 10px 14px; border: 1px solid #1a3350; }
+        .info-panel-body .search-links { margin-top: 14px; padding-top: 12px; border-top: 1px solid #1a3350; display: flex; gap: 10px; flex-wrap: wrap; }
+
+        .prinsipper { max-width: 860px; margin: 48px auto 0; border-top: 1px solid #1a3350; padding-top: 28px; }
+        .prinsipper h2 { font-size: 1.15rem; margin-bottom: 14px; color: #b0daff; }
+        .prinsipper table { width: 100%; border-collapse: collapse; }
+        .prinsipper th, .prinsipper td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #1a3350; font-size: 0.96rem; }
+        .prinsipper th { color: #8ccef5; }
+        .kilder { max-width: 860px; margin: 28px auto; font-size: 0.85rem; color: #4a6a80; text-align: center; }
+
+        @media (max-width: 960px) {
+            .top-bar { flex-direction: column; }
+            .top-right { width: 100%; }
+            .main-layout { flex-direction: column; }
+            .popup-column { width: 100%; position: static; order: -1; }
+            .popup-column.hidden { display: none; }
+            .tree-column { max-width: 100%; }
+            body { padding: 12px; }
+            h1 { font-size: 1.5rem; }
+            .info-panel-body { max-height: 40vh; }
+            .search-nav { bottom: 12px; right: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>Norsk Totalforsvar</h1>
+<p class="subtitle">Klikk for å åpne/lukke · Pek på en enhet for info · Søk for å filtrere</p>
+
+<div class="top-bar">
+    <div class="top-left">
+        <div class="search-box">
+            <input type="text" id="search" placeholder="Søk etter enhet...">
+            <button onclick="resetSearch()">Nullstill</button>
+        </div>
+        <div class="toolbar">
+            <button onclick="expandToLevel(1)">Nivå 1–2</button>
+            <button onclick="expandToLevel(2)">Nivå 1–3</button>
+            <button onclick="expandToLevel(3)">Nivå 1–4</button>
+            <button onclick="expandAll()">Åpne alt</button>
+            <button onclick="collapseAll()">Lukk alt</button>
+        </div>
+        <div class="search-count" id="searchCount"><span id="searchText"></span></div>
+    </div>
+    <div class="top-right">
+        <div class="sit-buttons">
+            <button onclick="lagreSituasjon()">💾 Lagre</button>
+            <button onclick="hentSituasjon()">📂 Hent</button>
+            <button class="reset-btn" onclick="nullstillAlleStatuser()">🔄 Nullstill</button>
+            <button class="toggle-btn" id="toggleFilterBtn" onclick="toggleFilter()">👁 Vis aktive</button>
+        </div>
+        <span class="sit-name" id="sitName"></span>
+        <div class="legend">
+            <span><span class="legend-dot default"></span>Ikke valgt</span>
+            <span><span class="legend-dot orange"></span>Deltager</span>
+            <span><span class="legend-dot green"></span>Samhandling</span>
+        </div>
+    </div>
+</div>
+
+<div class="search-nav" id="searchNav">
+    <button onclick="navigateSearch(-1)">◀</button>
+    <span id="searchPos">0 / 0</span>
+    <button onclick="navigateSearch(1)">▶</button>
+</div>
+
+<input type="file" id="fileInput" accept=".json" style="display:none">
+
+<div class="main-layout">
+    <div class="tree-column"><div class="tree" id="tree"></div></div>
+    <div class="popup-column hidden" id="popupCol">
+        <div class="info-panel" id="infoPanel">
+            <div class="info-panel-header">
+                <span id="infoTitle">Informasjon</span>
+                <button class="close-btn" onclick="closePanel()" title="Lukk">✕</button>
+            </div>
+            <div class="status-bar" id="statusBar">
+                <span class="status-label">Status:</span>
+                <button class="btn-samhandling" onclick="clickStatus('samhandling')">🟢 Samhandling</button>
+                <button class="btn-deltager" onclick="clickStatus('deltager')">🟠 Deltager</button>
+                <button class="btn-reset-status" onclick="clickStatus('none')">✕ Fjern</button>
+            </div>
+            <div class="info-panel-body" id="infoBody"></div>
+        </div>
+    </div>
+</div>
+
+<div class="prinsipper">
+    <h2>🔑 Nøkkelprinsipper i totalforsvaret</h2>
+    <table>
+        <tr><th>Prinsipp</th><th>Beskrivelse</th></tr>
+        <tr><td><strong>Ansvarsprinsippet</strong></td><td>Den som har ansvar i fred, har ansvar i krise og krig</td></tr>
+        <tr><td><strong>Likhetsprinsippet</strong></td><td>Organisasjonen skal være mest mulig lik i fred, krise og krig</td></tr>
+        <tr><td><strong>Nærhetsprinsippet</strong></td><td>Kriser skal håndteres på lavest mulig nivå</td></tr>
+        <tr><td><strong>Samvirkeprinsippet</strong></td><td>Alle aktører har plikt til å samarbeide</td></tr>
+    </table>
+</div>
+<p class="kilder">Kilder: regjeringen.no · forsvaret.no · politiet.no · pst.no · dsb.no · toll.no · forf.no · Wikipedia (no) · SNL · Folk og Forsvar</p>
+
+<script src="data.js"></script>
+
+<script>
+const chevronSVG=`<svg class="chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+let isSearchActive=false;
+let activeHoverNode=null;
+let currentSituasjonName='';
+let filterActive=false;
+const nodeMap=new Map();
+let currentInfoLi=null;
+let currentInfoName='';
+
+function getAncestorNames(li){const n=[];let el=li.parentElement?.closest('li');while(el){const l=el.querySelector(':scope>.node .label');if(l)n.unshift(l.textContent);el=el.parentElement?.closest('li');}return n;}
+function getParentName(li){const p=li.parentElement?.closest('li');if(p){const l=p.querySelector(':scope>.node .label');if(l)return l.textContent;}return '';}
+
+function buildTree(node,level=0){
+  const li=document.createElement('li');
+  li.className=`level-${level} status-${node.status||'none'}`;
+  if(level<=1)li.classList.add('expanded');
+  const hasKids=node.children&&node.children.length>0;
+  const span=document.createElement('span');
+  span.className='node';
+  span.innerHTML=(hasKids?chevronSVG:'')+`<span class="label">${node.name}</span>`;
+  if(hasKids){
+    const b=document.createElement('span');b.className='badge';b.textContent=node.children.length;span.appendChild(b);
+  }
+  nodeMap.set(node,li);
+  li._dataNode=node;
+  span.addEventListener('click',()=>{if(hasKids)li.classList.toggle('expanded');});
+  span.addEventListener('mouseenter',()=>{
+    if(activeHoverNode&&activeHoverNode!==span)activeHoverNode.classList.remove('active-hover');
+    span.classList.add('active-hover');activeHoverNode=span;
+    const label=span.querySelector('.label');
+    if(label)showInfo(label.textContent,li);
+  });
+  li.appendChild(span);
+  if(hasKids){const ul=document.createElement('ul');node.children.forEach(c=>ul.appendChild(buildTree(c,level+1)));li.appendChild(ul);}
+  return li;
+}
+
+const treeEl=document.getElementById('tree');
+const rootUl=document.createElement('ul');
+rootUl.appendChild(buildTree(data));
+treeEl.appendChild(rootUl);
+
+// ── Status ──
+function setStatusRecursive(dataNode,status){
+  dataNode.status=status;
+  const li=nodeMap.get(dataNode);
+  if(li){
+    li.classList.remove('status-none','status-deltager','status-samhandling');
+    li.classList.add('status-'+status);
+  }
+  if(dataNode.children)dataNode.children.forEach(c=>setStatusRecursive(c,status));
+}
+
+function setStatus(li,status){
+  const node=li._dataNode;if(!node)return;
+  setStatusRecursive(node,status);
+  updateStatusBar(li);
+  if(filterActive)applyFilter();
+}
+
+function updateStatusBar(li){
+  const node=li?._dataNode;
+  const st=node?node.status:'none';
+  const bar=document.getElementById('statusBar');
+  bar.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+  if(st==='samhandling')bar.querySelector('.btn-samhandling').classList.add('active');
+  else if(st==='deltager')bar.querySelector('.btn-deltager').classList.add('active');
+}
+
+function clickStatus(status){
+  if(!currentInfoLi)return;
+  setStatus(currentInfoLi,status);
+}
+
+function nullstillAlleStatuser(){
+  function resetNode(n){n.status='none';if(n.children)n.children.forEach(resetNode);}
+  resetNode(data);
+  document.querySelectorAll('.tree li').forEach(li=>{
+    li.classList.remove('status-none','status-deltager','status-samhandling','has-active-child');
+    li.classList.add('status-none');
+  });
+  currentSituasjonName='';
+  document.getElementById('sitName').innerHTML='';
+  if(currentInfoLi)updateStatusBar(currentInfoLi);
+  if(filterActive)applyFilter();
+}
+
+// ── Filter toggle ──
+function toggleFilter(){
+  filterActive=!filterActive;
+  const btn=document.getElementById('toggleFilterBtn');
+  if(filterActive){
+    btn.classList.add('active');
+    btn.textContent='👁 Vis alle';
+    applyFilter();
+  }else{
+    btn.classList.remove('active');
+    btn.textContent='👁 Vis aktive';
+    removeFilter();
+  }
+}
+
+function applyFilter(){
+  const tree=document.querySelector('.tree');
+  // Clear previous
+  document.querySelectorAll('.tree li.has-active-child').forEach(li=>li.classList.remove('has-active-child'));
+  tree.classList.add('filter-active');
+  // Mark parents of active nodes so they stay visible
+  document.querySelectorAll('.tree li.status-deltager, .tree li.status-samhandling').forEach(li=>{
+    let p=li.parentElement?.closest('li');
+    while(p){
+      p.classList.add('has-active-child');
+      if(!p.classList.contains('expanded'))p.classList.add('expanded');
+      p=p.parentElement?.closest('li');
+    }
+  });
+}
+
+function removeFilter(){
+  const tree=document.querySelector('.tree');
+  tree.classList.remove('filter-active');
+  document.querySelectorAll('.tree li.has-active-child').forEach(li=>li.classList.remove('has-active-child'));
+}
+
+// ── Lagre / Hent ──
+function extractStatuses(node){
+  const obj={name:node.name,status:node.status||'none'};
+  if(node.children)obj.children=node.children.map(extractStatuses);
+  return obj;
+}
+
+function lagreSituasjon(){
+  const name=prompt('Gi situasjonen et navn:','Situasjon '+new Date().toLocaleDateString('no'));
+  if(!name)return;
+  currentSituasjonName=name;
+  document.getElementById('sitName').innerHTML='Aktiv: <strong>'+name+'</strong>';
+  const payload={situasjonName:name,savedAt:new Date().toISOString(),statuses:extractStatuses(data)};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name.replace(/[^a-zA-Z0-9æøåÆØÅ _-]/g,'_')+'.json';
+  a.click();URL.revokeObjectURL(a.href);
+}
+
+function hentSituasjon(){document.getElementById('fileInput').click();}
+
+document.getElementById('fileInput').addEventListener('change',function(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const payload=JSON.parse(ev.target.result);
+      if(payload.statuses){
+        applyStatuses(data,payload.statuses);refreshAllStatusClasses();
+        currentSituasjonName=payload.situasjonName||file.name;
+        document.getElementById('sitName').innerHTML='Aktiv: <strong>'+currentSituasjonName+'</strong>';
+        if(currentInfoLi)updateStatusBar(currentInfoLi);
+        if(filterActive)applyFilter();
+      }else{alert('Ugyldig situasjonsfil.');}
+    }catch(err){alert('Kunne ikke lese filen: '+err.message);}
+  };
+  reader.readAsText(file);e.target.value='';
+});
+
+function applyStatuses(dataNode,savedNode){
+  if(savedNode.status)dataNode.status=savedNode.status;
+  if(dataNode.children&&savedNode.children){
+    for(let i=0;i<dataNode.children.length&&i<savedNode.children.length;i++)
+      applyStatuses(dataNode.children[i],savedNode.children[i]);
+  }
+}
+
+function refreshAllStatusClasses(){
+  nodeMap.forEach((li,node)=>{
+    li.classList.remove('status-none','status-deltager','status-samhandling');
+    li.classList.add('status-'+(node.status||'none'));
+  });
+}
+
+// ── Search ──
+const searchInput=document.getElementById('search');
+const searchTextEl=document.getElementById('searchText');
+const searchNavEl=document.getElementById('searchNav');
+const searchPosEl=document.getElementById('searchPos');
+let searchTimeout,searchMatches=[],searchIndex=0;
+
+searchInput.addEventListener('input',()=>{clearTimeout(searchTimeout);searchTimeout=setTimeout(()=>doSearch(searchInput.value),250);});
+searchInput.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape')resetSearch();
+  if(e.key==='Enter'){e.preventDefault();if(searchMatches.length)navigateSearch(1);}
+});
+
+function doSearch(term){
+  clearSearchVisuals();
+  if(!term||term.length<2){searchTextEl.textContent='';searchNavEl.classList.remove('visible');isSearchActive=false;expandToLevel(1);return;}
+  isSearchActive=true;
+  const lower=term.toLowerCase();
+  document.querySelectorAll('.tree li').forEach(li=>{li.classList.remove('expanded');li.classList.add('dim');});
+  document.querySelectorAll('.tree .label').forEach(label=>{
+    if(label.textContent.toLowerCase().includes(lower)){
+      const li=label.closest('li');label.classList.add('highlight');searchMatches.push(li);
+      li.classList.remove('dim');li.classList.add('search-path');
+      let p=li.parentElement?.closest('li');
+      while(p){p.classList.add('expanded','search-path');p.classList.remove('dim');p=p.parentElement?.closest('li');}
+      if(li.querySelector(':scope>ul')){li.classList.add('expanded');li.querySelectorAll(':scope>ul>li').forEach(c=>c.classList.remove('dim'));}
+    }
+  });
+  if(searchMatches.length>0){searchTextEl.textContent=`${searchMatches.length} treff`;searchNavEl.classList.add('visible');searchIndex=0;scrollToMatch(0);}
+  else{searchTextEl.textContent='Ingen treff';searchNavEl.classList.remove('visible');}
+}
+
+function navigateSearch(dir){if(!searchMatches.length)return;searchIndex=(searchIndex+dir+searchMatches.length)%searchMatches.length;scrollToMatch(searchIndex);}
+
+function scrollToMatch(idx){
+  document.querySelectorAll('.search-active').forEach(el=>el.classList.remove('search-active'));
+  const li=searchMatches[idx];li.classList.add('search-active');
+  const node=li.querySelector(':scope>.node');
+  if(node)node.scrollIntoView({behavior:'smooth',block:'center'});
+  searchPosEl.textContent=`${idx+1} / ${searchMatches.length}`;
+  const lbl=li.querySelector(':scope>.node .label');
+  if(lbl)showInfo(lbl.textContent,li);
+}
+
+function clearSearchVisuals(){
+  document.querySelectorAll('.highlight').forEach(el=>el.classList.remove('highlight'));
+  document.querySelectorAll('.search-path').forEach(el=>el.classList.remove('search-path'));
+  document.querySelectorAll('.search-active').forEach(el=>el.classList.remove('search-active'));
+  document.querySelectorAll('.dim').forEach(el=>el.classList.remove('dim'));
+  searchMatches=[];searchIndex=0;
+}
+
+function resetSearch(){
+  searchInput.value='';searchTextEl.textContent='';searchNavEl.classList.remove('visible');
+  isSearchActive=false;clearSearchVisuals();expandToLevel(1);
+}
+
+// ── Level buttons ──
+function getLevel(li){return parseInt([...li.classList].find(c=>c.startsWith('level-'))?.replace('level-','')||'99');}
+function expandToLevel(m){clearSearchVisuals();isSearchActive=false;document.querySelectorAll('.tree li').forEach(li=>{if(getLevel(li)<=m)li.classList.add('expanded');else li.classList.remove('expanded');});}
+function expandAll(){clearSearchVisuals();isSearchActive=false;document.querySelectorAll('.tree li').forEach(li=>li.classList.add('expanded'));}
+function collapseAll(){clearSearchVisuals();isSearchActive=false;document.querySelectorAll('.tree li').forEach(li=>{if(getLevel(li)===0)li.classList.add('expanded');else li.classList.remove('expanded');});}
+
+// ── Info panel ──
+const popupCol=document.getElementById('popupCol');
+const infoTitle=document.getElementById('infoTitle');
+const infoBody=document.getElementById('infoBody');
+const wikiCache={};
+
+function closePanel(){
+  popupCol.classList.remove('visible');popupCol.classList.add('hidden');
+  currentInfoName='';currentInfoLi=null;
+  if(activeHoverNode){activeHoverNode.classList.remove('active-hover');activeHoverNode=null;}
+}
+
+function cleanTerm(r){let t=r.replace(/\s*\(.*?\)\s*/g,' ').replace(/–.*$/g,'').replace(/«|»/g,'').replace(/\b(kl\.|m\.fl\.|ca\.|fra)\b/gi,'').replace(/\d{3,}/g,'').replace(/\s{2,}/g,' ').trim();if(t.length<3)t=r.replace(/\s*\(.*?\)\s*/g,' ').trim();return t;}
+
+function buildSearchQuery(name,parentName){
+  const clean=cleanTerm(name);const cleanParent=parentName?cleanTerm(parentName):'';
+  if(cleanParent&&cleanParent!==clean)return clean+' '+cleanParent;return clean;
+}
+
+function searchLinksHTML(name,parentName){
+  const q=buildSearchQuery(name,parentName);
+  return `<div class="search-links"><a class="wiki-link" href="https://no.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}" target="_blank" rel="noopener">📖 Søk på Wikipedia</a><a class="wiki-link" href="https://www.google.com/search?q=${encodeURIComponent(q)}" target="_blank" rel="noopener">🔍 Søk på Google</a></div>`;
+}
+
+async function fetchWiki(term){
+  const k=term.toLowerCase();if(wikiCache[k])return wikiCache[k];
+  const s=cleanTerm(term);
+  try{
+    const r=await fetch(`https://no.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(s)}&limit=3&namespace=0&format=json&origin=*`);
+    const d=await r.json();
+    if(d[1]?.length){const t=d[1][0],u=d[3][0];const sr=await fetch(`https://no.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(t)}`);if(sr.ok){const sd=await sr.json();const res={found:true,title:sd.title||t,extract:sd.extract||'',url:u,thumb:sd.thumbnail?.source||null};wikiCache[k]=res;return res;}}
+    const er=await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(s)}&limit=3&namespace=0&format=json&origin=*`);
+    const ed=await er.json();
+    if(ed[1]?.length){const et=ed[1][0],eu=ed[3][0];const esr=await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(et)}`);if(esr.ok){const esd=await esr.json();const res={found:true,title:esd.title||et,extract:esd.extract||'',url:eu,thumb:esd.thumbnail?.source||null,lang:'en'};wikiCache[k]=res;return res;}}
+  }catch(e){console.warn(e);}
+  try{
+    const dq=encodeURIComponent(s+' Norge');const dr=await fetch(`https://api.duckduckgo.com/?q=${dq}&format=json&no_html=1&skip_disambig=1`);const dd=await dr.json();
+    if(dd.AbstractText){const res={found:true,title:dd.Heading||s,extract:dd.AbstractText,url:dd.AbstractURL||'',source:'web'};wikiCache[k]=res;return res;}
+  }catch(e){console.warn(e);}
+  const res={found:false};wikiCache[k]=res;return res;
+}
+
+function showInfo(name,li){
+  currentInfoName=name;currentInfoLi=li;
+  popupCol.classList.remove('hidden');popupCol.classList.add('visible');
+  updateStatusBar(li);
+  const anc=getAncestorNames(li);
+  const parentName=getParentName(li);
+  const path=anc.map(a=>`<span>${a}</span><span class="sep"> › </span>`).join('')+`<span class="current">${name}</span>`;
+  infoTitle.textContent=name;
+  infoBody.innerHTML=`<div class="hierarchy">${path}</div><div class="loading">⏳ Henter informasjon...</div>`;
+
+  fetchWiki(name).then(info=>{
+    if(currentInfoName!==name)return;
+    const links=searchLinksHTML(name,parentName);
+    if(info.found){
+      const th=info.thumb?`<img class="thumb" src="${info.thumb}" alt="">`:'';
+      if(info.source==='web'){
+        infoBody.innerHTML=`<div class="hierarchy">${path}</div><div class="wiki-extract">${info.extract}</div><p style="color:#8cc0d8;font-size:0.85rem;margin-bottom:4px;">ℹ️ Informasjon hentet fra nettsøk</p>${links}`;
+      }else{
+        const ln=info.lang==='en'?' <em style="color:#6aa0b8;font-size:0.85rem;">(English)</em>':'';
+        infoBody.innerHTML=`<div class="hierarchy">${path}</div>${th}<div class="wiki-extract">${info.extract}${ln}</div>${links}`;
+      }
+    }else{
+      infoBody.innerHTML=`<div class="hierarchy">${path}</div><div style="color:#8cc0d8;margin:12px 0;">Ingen informasjon funnet automatisk for denne enheten.</div>${links}`;
+    }
+  });
+}
+
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape'){closePanel();if(document.activeElement===searchInput)resetSearch();}});
+</script>
+</body>
+</html>
